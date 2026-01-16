@@ -1,0 +1,2 @@
+adafruit-circuitpython-bme280>=2.6.0
+flask>=2.0.0
