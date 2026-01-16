@@ -2,7 +2,8 @@
 
 A lightweight IoT environmental monitoring system for Raspberry Pi Zero. Collects temperature, humidity, and barometric pressure data from a BME280 sensor and displays it on a real-time web dashboard.
 
-![Dashboard Preview](docs/dashboard-preview.png)
+<img width="617" height="670" alt="image" src="https://github.com/user-attachments/assets/0341b7b4-d11a-48d6-9cf6-b20f582acf32" />
+
 
 ## Features
 
