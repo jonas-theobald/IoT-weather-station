@@ -1,0 +1,17 @@
+[Unit]
+Description=BME280 Environment Monitor - Sensor Collector and Web Dashboard
+After=network.target
+
+[Service]
+Type=simple
+# These paths are updated by install.sh
+User=pi
+WorkingDirectory=/home/pi/bme280
+ExecStart=/home/pi/bme280-env/bin/python /home/pi/bme280/start_all.py
+Restart=always
+RestartSec=10
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=multi-user.target
