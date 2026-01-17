@@ -58,8 +58,8 @@ sudo reboot
 
 ```bash
 # Clone the repository
-git clone https://github.com/YOUR_USERNAME/piZero_BME280.git
-cd piZero_BME280
+git clone https://github.com/jonas-theobald/IoT-weather-station.git
+cd IoT-weather-station
 
 # Run the install script
 chmod +x install.sh
