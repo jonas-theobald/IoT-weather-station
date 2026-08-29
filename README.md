@@ -188,6 +188,12 @@ There is deliberately no position configuration: the station never pushes `geo`.
 
 Both transports feed the **same entity**. The BLE side is consumed by the [hydris-weather-ble-plugin](https://github.com/jonas-theobald/hydris-weather-ble-plugin) running in the engine; it adds the RSSI link and keys identity on the Pi's SoC serial. Architecture, the entity model, the GATT contract, and the hard-won BLE gotchas (kernel advertising bug and friends) are in [docs/HYDRIS_INTEGRATION.md](docs/HYDRIS_INTEGRATION.md).
 
+This is what it looks like once everything is running:
+
+![The station in Hydris](docs/images/hydris.png)
+
+The station is a first-class entity in Hydris: placed on the map by the operator, MIL-STD-2525 symbol derived from its taxonomy, live readings in the entity panel, and both transports reporting side by side ("WiFi updates" / "BLE updates"). The setup works as a reference integration for small sensor hardware in general — a sensor node that speaks gRPC and/or a slim GATT contract, plus a small hub plugin, is all it takes to put hardware on a Hydris map.
+
 Test the engine path without hardware:
 ```bash
 python tools/simulate_station.py --server localhost:50051
