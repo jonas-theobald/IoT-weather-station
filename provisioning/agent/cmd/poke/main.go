@@ -6,18 +6,21 @@
 package main
 
 import (
+	"encoding/json"
 	"errors"
 	"flag"
 	"fmt"
 	"io"
 	"log"
 	"os"
+	"strings"
 	"time"
 
 	pb "github.com/projectqai/proto/go"
 	"golang.org/x/sys/unix"
 	"google.golang.org/protobuf/encoding/prototext"
 	"google.golang.org/protobuf/proto"
+	"google.golang.org/protobuf/types/known/structpb"
 
 	"github.com/jonas-theobald/IoT-weather-station/provisioning/agent/framing"
 	"github.com/jonas-theobald/IoT-weather-station/provisioning/agent/protocol"
@@ -25,6 +28,7 @@ import (
 
 func main() {
 	port := flag.String("port", "/dev/cu.usbmodem3101", "gadget serial port")
+	read := flag.String("read", "", "read named values instead (comma-separated, e.g. sensor,system)")
 	flag.Parse()
 
 	f, err := os.OpenFile(*port, os.O_RDWR, 0)
@@ -36,7 +40,23 @@ func main() {
 	}
 
 	const seq = 42
-	if _, err := f.Write(framing.Encode(protocol.TypeGetEntity, seq, nil)); err != nil {
+	reqType := byte(protocol.TypeGetEntity)
+	var reqPayload []byte
+	if *read != "" {
+		reqType = protocol.TypeRead
+		keys := []any{}
+		for _, k := range strings.Split(*read, ",") {
+			keys = append(keys, strings.TrimSpace(k))
+		}
+		s, err := structpb.NewStruct(map[string]any{"keys": keys})
+		if err != nil {
+			log.Fatalf("build request: %v", err)
+		}
+		if reqPayload, err = proto.Marshal(s); err != nil {
+			log.Fatalf("marshal request: %v", err)
+		}
+	}
+	if _, err := f.Write(framing.Encode(reqType, seq, reqPayload)); err != nil {
 		log.Fatalf("write: %v", err)
 	}
 
@@ -52,9 +72,18 @@ func main() {
 			log.Fatalf("read: %v", err)
 		}
 		for _, fr := range dec.Feed(buf[:n]) {
-			if fr.Type != protocol.TypeGetEntity|protocol.RespBit || fr.Seq != seq {
+			if fr.Type != reqType|protocol.RespBit || fr.Seq != seq {
 				log.Printf("skipping frame type 0x%02x seq %d", fr.Type, fr.Seq)
 				continue
+			}
+			if reqType == protocol.TypeRead {
+				var s structpb.Struct
+				if err := proto.Unmarshal(fr.Payload, &s); err != nil {
+					log.Fatalf("bad struct payload: %v", err)
+				}
+				out, _ := json.MarshalIndent(s.AsMap(), "", "  ")
+				fmt.Println(string(out))
+				return
 			}
 			var e pb.Entity
 			if err := proto.Unmarshal(fr.Payload, &e); err != nil {
