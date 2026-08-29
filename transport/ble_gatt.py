@@ -12,6 +12,7 @@ happens here and nowhere else. See docs/HYDRIS_INTEGRATION.md.
 
 from __future__ import annotations
 
+import functools
 import json
 import struct
 import threading
@@ -77,8 +78,12 @@ def encode_from_entity(entity: Entity) -> dict[str, bytes]:
     return out
 
 
-def station_metadata(station: StationConfig) -> bytes:
-    """Read-once JSON so the hub needs no per-station config of its own."""
+def station_metadata(station: StationConfig, serial: str) -> bytes:
+    """Read-once JSON so the hub needs no per-station config of its own.
+
+    Carries the serial too: bluetoothd exposes its own built-in DIS, so a
+    central asking for 0x180A can land on the wrong instance -- the hub
+    must never depend on reading our DIS copy."""
     return json.dumps(
         {
             "v": 1,
@@ -87,6 +92,7 @@ def station_metadata(station: StationConfig) -> bytes:
             "lat": station.lat,
             "lon": station.lon,
             "alt": station.alt,
+            "serial": serial,
         },
         separators=(",", ":"),
     ).encode()
@@ -123,23 +129,30 @@ class BleGattTransport:
             PRESSURE_CHAR_UUID: _PRESSURE_UNKNOWN,
         }
         self._char_index: dict[str, int] = {}  # uuid -> position in peripheral.characteristics
-        meta = station_metadata(station)
+        serial = device_serial()
+        meta = station_metadata(station, serial)
 
         self._peripheral = peripheral.Peripheral(adapter_address, local_name=device_name)
+
+        # Read callbacks must introspect as ZERO-argument callables: bluezero
+        # inspects the signature and, seeing any parameter (a default-arg
+        # closure counts!), passes the D-Bus options dict as that argument --
+        # the callback then throws and the central sees ATT "Unlikely error".
+        # functools.partial with everything bound introspects as zero-arg.
 
         # Station service first: bluezero advertises primary services in
         # order, and this 128-bit UUID is the one discovery must see.
         self._add_service(1, STATION_SERVICE_UUID)
-        self._add_char(1, 1, STATION_META_CHAR_UUID, ["read"], lambda: list(meta))
+        self._add_char(1, 1, STATION_META_CHAR_UUID, ["read"],
+                       functools.partial(self._static_read, meta))
 
         self._add_service(2, ESS_SERVICE_UUID)
         for chr_id, uuid in enumerate(
             (TEMPERATURE_CHAR_UUID, HUMIDITY_CHAR_UUID, PRESSURE_CHAR_UUID), start=1
         ):
             self._add_char(2, chr_id, uuid, ["read", "notify"],
-                           lambda u=uuid: list(self._values[u]))
+                           functools.partial(self._live_read, uuid))
 
-        serial = device_serial()
         self._add_service(3, DIS_SERVICE_UUID)
         for chr_id, (uuid, value) in enumerate(
             (
@@ -150,7 +163,8 @@ class BleGattTransport:
             ),
             start=1,
         ):
-            self._add_char(3, chr_id, uuid, ["read"], lambda v=value: list(v.encode()))
+            self._add_char(3, chr_id, uuid, ["read"],
+                           functools.partial(self._static_read, value.encode()))
 
         # publish() runs the GLib mainloop and never returns -- it owns
         # advertising and all D-Bus traffic. Everything after this point
@@ -159,6 +173,12 @@ class BleGattTransport:
             target=self._peripheral.publish, name="ble-gatt", daemon=True
         )
         self._thread.start()
+
+    def _static_read(self, data: bytes) -> list[int]:
+        return list(data)
+
+    def _live_read(self, uuid: str) -> list[int]:
+        return list(self._values[uuid])
 
     def _add_service(self, srv_id: int, uuid: str) -> None:
         self._peripheral.add_service(srv_id=srv_id, uuid=uuid, primary=True)
