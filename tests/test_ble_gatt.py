@@ -17,10 +17,7 @@ from transport.ble_gatt import (
     station_metadata,
 )
 
-STATION = StationConfig(
-    entity_id="pizero-01.weather", label="Pi Zero Weather Station",
-    lat=49.44, lon=7.77, alt=251.0,
-)
+STATION = StationConfig(entity_id="pizero-01.weather", label="Pi Zero Weather Station")
 
 
 class EssEncodingTest(unittest.TestCase):
@@ -67,14 +64,33 @@ class EssEncodingTest(unittest.TestCase):
         self.assertTrue(
             entity.classification.taxonomy[0].equipment.sensor.HasField("emplaced")
         )
+        # Position is operator-placed in Hydris -- the station must never
+        # push geo, or it would overwrite the manual placement every tick.
+        self.assertFalse(entity.HasField("geo"))
+        # fresh advances "last seen"; no until keeps the entity permanent.
+        self.assertTrue(entity.lifetime.HasField("fresh"))
+        self.assertFalse(entity.lifetime.HasField("until"))
 
     def test_metadata_shape(self):
         meta = json.loads(station_metadata(STATION, "0000000012345678"))
         self.assertEqual(
             meta,
             {"v": 1, "id": "pizero-01.weather", "label": "Pi Zero Weather Station",
-             "lat": 49.44, "lon": 7.77, "alt": 251.0, "serial": "0000000012345678"},
+             "serial": "0000000012345678"},
         )
+
+    def test_wifi_telemetry_metric(self):
+        from transport.grpc_wifi import WIFI_UPDATES_METRIC_ID, with_wifi_telemetry
+
+        reading = {"temperature_c": 23.5, "humidity_percent": 45.2, "pressure_hpa": 1013.25}
+        entity = build_weather_entity(
+            reading, STATION, datetime.datetime.now(datetime.timezone.utc)
+        )
+        wired = with_wifi_telemetry(entity, 7)
+        self.assertEqual(len(entity.metric.metrics), 3)  # original untouched
+        counter = {m.id: m for m in wired.metric.metrics}[WIFI_UPDATES_METRIC_ID]
+        self.assertEqual(counter.uint64, 7)
+        self.assertTrue(counter.HasField("measured_at"))
 
 
 if __name__ == "__main__":

@@ -10,15 +10,18 @@ The BME280 is on I2C, which isn't in the documented plugin HAL. A native plugin 
 
 ## Entity design
 
-Matches Hydris's own "Weather Station" pattern: `{ id, geo, symbol, sensor, metric, device, link, power }`.
+Matches Hydris's own "Weather Station" pattern: `{ id, symbol, sensor, metric, device, link }`.
 
 | Component | Value |
 |---|---|
 | `id` | `pizero-01.weather` |
-| `geo` | Fixed lat/lon/altitude (stationary node) |
-| `device` | `class: "weather"`, `state: DeviceStateActive` |
+| `geo` | **Never pushed by the station.** The operator places it on the map in Hydris (openmeteo pattern) — components are whole-replaced, so a station that kept pushing geo would overwrite the manual placement every tick. |
+| `device` | `class: "weather"`, `category: "Sensors"`, `parent: "weatherstation.service"`, `unique_hardware_id` = Pi SoC serial, `state: DeviceStateActive`. Identical shape from both transports, or the fields flap with whichever pushed last. |
+| `classification` | Taxonomy `equipment → sensor → emplaced`; the engine derives the `SFGPESE---*****` symbol from it (friendly ground emplaced sensor). |
 | `sensor` | `{}` (marks it as a sensor, no coverage geometry needed) |
-| `metric` | One `Metric` per reading, see below |
+| `metric` | Ids 1–3: one `Metric` per reading, see below. Ids 10+ are per-transport telemetry: 10 = "WiFi updates" (appended by the gRPC adapter), 11 = "BLE updates" (pushed by the hub plugin). Metrics sub-merge by id, so each transport owns its counter, and its `measured_at` reads as "last update over this path". |
+| `lifetime` | `fresh` on every push (advances "last seen" in Hydris); never `until` — the entity is permanent. |
+| `link` | BLE-only, owned by the hub plugin: `status`, `rssi_dbm`, `last_seen`, `rf_mode: "BLE"`, `via: "weatherstation.service"`. The WiFi path is a direct gRPC push, not a mediated link — its liveness shows via metric 10. |
 
 | Reading | `kind` | `unit` | `range` |
 |---|---|---|---|
