@@ -27,9 +27,7 @@ HYDRIS_BLE = os.environ.get("HYDRIS_BLE") == "1"
 HYDRIS_BLE_NAME = os.environ.get("HYDRIS_BLE_NAME", "hydris-weather")
 HYDRIS_ENTITY_ID = os.environ.get("HYDRIS_ENTITY_ID", "pizero-01.weather")
 HYDRIS_LABEL = os.environ.get("HYDRIS_LABEL", "Pi Zero Weather Station")
-HYDRIS_LAT = float(os.environ.get("HYDRIS_LAT", "0"))
-HYDRIS_LON = float(os.environ.get("HYDRIS_LON", "0"))
-HYDRIS_ALT = float(os.environ.get("HYDRIS_ALT", "0"))
+# No HYDRIS_LAT/LON/ALT: position is set by the operator in Hydris.
 
 
 def create_sensor(address=0x76):
@@ -50,10 +48,7 @@ def main():
     print(f"Sensor initialized. Collecting data every {INTERVAL_SECONDS} seconds.")
     print("Press Ctrl+C to stop.\n")
 
-    station = StationConfig(
-        entity_id=HYDRIS_ENTITY_ID, label=HYDRIS_LABEL,
-        lat=HYDRIS_LAT, lon=HYDRIS_LON, alt=HYDRIS_ALT,
-    )
+    station = StationConfig(entity_id=HYDRIS_ENTITY_ID, label=HYDRIS_LABEL)
     transports = []
     if HYDRIS_SERVER:
         transports.append(GrpcWifiTransport(HYDRIS_SERVER))

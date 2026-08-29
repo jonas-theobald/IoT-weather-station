@@ -34,17 +34,12 @@ def main() -> None:
     parser.add_argument("--entity-id", default="pizero-01.weather",
                         help="collides with the real station on purpose -- it simulates it")
     parser.add_argument("--label", default="Pi Zero Weather Station")
-    parser.add_argument("--lat", type=float, default=0.0)
-    parser.add_argument("--lon", type=float, default=0.0)
-    parser.add_argument("--alt", type=float, default=0.0)
     parser.add_argument("--interval", type=float, default=2.0)
     parser.add_argument("--count", type=int, default=0, help="0 = run until interrupted")
     args = parser.parse_args()
 
-    station = StationConfig(
-        entity_id=args.entity_id, label=args.label,
-        lat=args.lat, lon=args.lon, alt=args.alt,
-    )
+    # No position: like the real station, placement happens in Hydris.
+    station = StationConfig(entity_id=args.entity_id, label=args.label)
     router = TransportRouter([GrpcWifiTransport(args.server)], mode=RouterMode.BROADCAST)
 
     sent = 0

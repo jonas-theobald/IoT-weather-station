@@ -20,13 +20,14 @@ _HUMIDITY_RANGE = metrics_pb2.MetricRange(min_double=0.0, max_double=100.0)
 _PRESSURE_RANGE = metrics_pb2.MetricRange(min_double=300.0, max_double=1100.0)
 
 
+# No geo here on purpose: the station never pushes a position. The correct
+# flow is operator placement in Hydris (same as the openmeteo plugin) --
+# and since components are whole-replaced, a station that kept pushing geo
+# would overwrite the manual placement on every tick.
 @dataclass(frozen=True)
 class StationConfig:
     entity_id: str
     label: str
-    lat: float
-    lon: float
-    alt: float
 
 
 @functools.lru_cache(maxsize=1)
@@ -74,11 +75,9 @@ def build_weather_entity(reading: dict, station: StationConfig, measured_at) -> 
     return world_pb2.Entity(
         id=station.entity_id,
         label=station.label,
-        geo=world_pb2.GeoSpatialComponent(
-            latitude=station.lat,
-            longitude=station.lon,
-            altitude=station.alt,
-        ),
+        # fresh advances "last seen" in Hydris; no `until`, so the entity
+        # stays permanent.
+        lifetime=world_pb2.Lifetime(fresh=ts),
         device=device,
         classification=_emplaced_sensor_classification(),
         sensor=world_pb2.SensorComponent(),

@@ -83,15 +83,13 @@ def station_metadata(station: StationConfig, serial: str) -> bytes:
 
     Carries the serial too: bluetoothd exposes its own built-in DIS, so a
     central asking for 0x180A can land on the wrong instance -- the hub
-    must never depend on reading our DIS copy."""
+    must never depend on reading our DIS copy. No position on purpose:
+    the operator places the station in Hydris."""
     return json.dumps(
         {
             "v": 1,
             "id": station.entity_id,
             "label": station.label,
-            "lat": station.lat,
-            "lon": station.lon,
-            "alt": station.alt,
             "serial": serial,
         },
         separators=(",", ":"),
