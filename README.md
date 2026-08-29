@@ -16,6 +16,7 @@ A lightweight IoT environmental monitoring system for Raspberry Pi Zero. Collect
 - **Low power** - Runs on Pi Zero 2 W with ~150mA draw
 - **Hydris publishing** - Optional gRPC push into a Hydris engine over WiFi
 - **BLE GATT peripheral** - Optional standard Environmental Sensing Service, consumed by the [hydris-weather-ble-plugin](https://github.com/jonas-theobald/hydris-weather-ble-plugin) hub plugin
+- **USB provisioning** - Plug the Pi into a laptop running Hydris and configure it from the UI (WiFi, Hydris settings, identify LED) — see [docs/PROVISIONING.md](docs/PROVISIONING.md)
 
 ## Hardware Requirements
 
@@ -130,6 +131,11 @@ IoT-weather-station/
 │   └── pending_store.py    # Retry buffer for failed pushes
 ├── tools/
 │   └── simulate_station.py # Push synthetic readings without hardware
+├── provisioning/           # USB provisioning: gadget setup + Go agent
+│   ├── usb-gadget.sh       # CDC ACM gadget identity (configfs)
+│   ├── usb-gadget.service
+│   ├── pi-provision.service
+│   └── agent/              # Go: framed world.proto RPC on /dev/ttyGS0
 ├── tests/                  # Wire-format and entity tests
 ├── docs/
 │   ├── HYDRIS_INTEGRATION.md  # Architecture, entity model, BLE gotchas
@@ -143,10 +149,8 @@ IoT-weather-station/
 
 ### Change Sensor Reading Interval
 
-Edit `start_all.py`:
-```python
-INTERVAL_SECONDS = 10  # Change to desired interval
-```
+Set the `HYDRIS_INTERVAL` environment variable (seconds, default 10) —
+via the systemd drop-in, or simply from the Hydris provisioning form.
 
 ### Change Web Dashboard Refresh Rate
 
@@ -183,6 +187,9 @@ Environment=HYDRIS_BLE=1
 | `HYDRIS_BLE_NAME` | `hydris-weather` | Advertised BLE local name |
 | `HYDRIS_ENTITY_ID` | `pizero-01.weather` | Entity id in the Hydris world model |
 | `HYDRIS_LABEL` | `Pi Zero Weather Station` | Entity label |
+| `HYDRIS_INTERVAL` | `10` | Sensor reading interval in seconds |
+
+All of these can also be set from the Hydris UI over a USB cable — see [docs/PROVISIONING.md](docs/PROVISIONING.md).
 
 There is deliberately no position configuration: the station never pushes `geo`. Place it on the map in Hydris — that placement persists.
 

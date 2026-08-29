@@ -18,7 +18,7 @@ from routing.transport_router import RouterMode, TransportRouter
 from transport.ble_gatt import BleGattTransport
 from transport.grpc_wifi import GrpcWifiTransport
 
-INTERVAL_SECONDS = 10
+INTERVAL_SECONDS = int(os.environ.get("HYDRIS_INTERVAL", "10"))
 
 # If neither is set, transports is empty and Hydris publishing is a no-op.
 HYDRIS_SERVER = os.environ.get("HYDRIS_SERVER")

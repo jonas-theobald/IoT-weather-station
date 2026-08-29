@@ -36,3 +36,7 @@ Thumbs.db
 # ProjectAtlas (local code index, machine-specific paths)
 .projectatlas/
 .mcp.json
+
+# Go build artifact (cross-compiled for the Pi)
+provisioning/agent/provision-agent
+provisioning/agent/poke

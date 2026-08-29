@@ -1,0 +1,11 @@
+[Unit]
+Description=USB CDC ACM provisioning gadget
+After=sys-kernel-config.mount
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+ExecStart=/usr/local/sbin/usb-gadget.sh
+
+[Install]
+WantedBy=multi-user.target
