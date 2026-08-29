@@ -52,6 +52,22 @@ class EssEncodingTest(unittest.TestCase):
             },
         )
 
+    def test_entity_device_and_taxonomy(self):
+        reading = {"temperature_c": 23.5, "humidity_percent": 45.2, "pressure_hpa": 1013.25}
+        entity = build_weather_entity(
+            reading, STATION, datetime.datetime.now(datetime.timezone.utc)
+        )
+        # Both transports must push this exact device shape (whole-replace
+        # merge), and the taxonomy is what makes the engine derive the
+        # SFGPESE---***** symbol.
+        self.assertEqual(entity.device.category, "Sensors")
+        self.assertEqual(entity.device.parent, "weatherstation.service")
+        self.assertEqual(getattr(entity.device, "class"), "weather")
+        self.assertTrue(entity.device.unique_hardware_id)
+        self.assertTrue(
+            entity.classification.taxonomy[0].equipment.sensor.HasField("emplaced")
+        )
+
     def test_metadata_shape(self):
         meta = json.loads(station_metadata(STATION, "0000000012345678"))
         self.assertEqual(
