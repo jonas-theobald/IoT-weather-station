@@ -74,6 +74,14 @@ mkdir -p "$INSTALL_DIR"
 cp -r ./*.py "$INSTALL_DIR/" 2>/dev/null || true
 cp -r ./requirements.txt "$INSTALL_DIR/" 2>/dev/null || true
 cp -r ./bme280.service "$INSTALL_DIR/" 2>/dev/null || true
+# Python package subdirectories (e.g. model/, transport/, routing/,
+# reliability/ for the Hydris client) -- a flat *.py glob misses these.
+for pkg_dir in ./*/; do
+    pkg_dir="${pkg_dir%/}"
+    if [ -f "$pkg_dir/__init__.py" ]; then
+        cp -r "$pkg_dir" "$INSTALL_DIR/"
+    fi
+done
 
 # Create venv if it doesn't exist
 if [ ! -d "$VENV_DIR" ]; then
@@ -89,7 +97,7 @@ deactivate
 # Update service file with correct paths
 echo -e "${YELLOW}[5/6]${NC} Configuring systemd service..."
 SERVICE_FILE="$INSTALL_DIR/bme280.service"
-sed -i "s|/home/jtheobald|$HOME|g" "$SERVICE_FILE"
+sed -i "s|^User=.*|User=$USER|g" "$SERVICE_FILE"
 sed -i "s|WorkingDirectory=.*|WorkingDirectory=$INSTALL_DIR|g" "$SERVICE_FILE"
 sed -i "s|ExecStart=.*|ExecStart=$VENV_DIR/bin/python $INSTALL_DIR/start_all.py|g" "$SERVICE_FILE"
 
