@@ -1,0 +1,15 @@
+# The provisioning agent owns /dev/ttyGS0 (no getty there!) and runs as
+# root on purpose: applying config writes system drop-ins, joins WiFi
+# and restarts services. Restart=always keeps the repair channel alive
+# no matter what -- it is the most robust thing on the box by design.
+[Unit]
+Description=USB serial provisioning agent
+After=usb-gadget.service
+
+[Service]
+ExecStart=/usr/local/sbin/provision-agent
+Restart=always
+RestartSec=3
+
+[Install]
+WantedBy=multi-user.target

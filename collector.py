@@ -20,7 +20,7 @@ from routing.transport_router import RouterMode, TransportRouter
 from transport.ble_gatt import BleGattTransport
 from transport.grpc_wifi import GrpcWifiTransport
 
-INTERVAL_SECONDS = 30  # How often to read the sensor
+INTERVAL_SECONDS = int(os.environ.get("HYDRIS_INTERVAL", "30"))  # How often to read the sensor
 
 HYDRIS_SERVER = os.environ.get("HYDRIS_SERVER")
 HYDRIS_BLE = os.environ.get("HYDRIS_BLE") == "1"

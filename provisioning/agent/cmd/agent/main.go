@@ -50,16 +50,45 @@ func main() {
 func handle(w *os.File, sn string, fr framing.Frame) error {
 	switch fr.Type {
 	case protocol.TypeGetEntity:
-		payload, err := proto.Marshal(identityEntity(sn))
-		if err != nil {
+		return respond(w, sn, fr, statusEntity(sn))
+
+	case protocol.TypePush:
+		var req pb.EntityChangeRequest
+		if err := proto.Unmarshal(fr.Payload, &req); err != nil {
 			return err
 		}
-		_, err = w.Write(framing.Encode(fr.Type|protocol.RespBit, fr.Seq, payload))
-		return err
+		if len(req.Changes) != 1 || req.Changes[0].Config == nil {
+			log.Printf("push without a config change -- ignoring")
+			return respond(w, sn, fr, statusEntity(sn))
+		}
+		cfg := req.Changes[0].Config
+		log.Printf("applying config v%d", cfg.GetVersion())
+		entity := func() *pb.Entity {
+			if err := applyConfig(cfg); err != nil {
+				log.Printf("apply v%d failed: %v", cfg.GetVersion(), err)
+				e := statusEntity(sn)
+				e.Device.State = pb.DeviceState_DeviceStateFailed
+				e.Device.Error = proto.String(err.Error())
+				return e
+			}
+			log.Printf("applied config v%d", cfg.GetVersion())
+			return statusEntity(sn) // re-read: report what is now true
+		}()
+		return respond(w, sn, fr, entity)
+
 	default:
 		log.Printf("ignoring unknown frame type 0x%02x", fr.Type)
 		return nil
 	}
+}
+
+func respond(w *os.File, sn string, fr framing.Frame, e *pb.Entity) error {
+	payload, err := proto.Marshal(e)
+	if err != nil {
+		return err
+	}
+	_, err = w.Write(framing.Encode(fr.Type|protocol.RespBit, fr.Seq, payload))
+	return err
 }
 
 // identityEntity is the agent's self-description: everything the hub
