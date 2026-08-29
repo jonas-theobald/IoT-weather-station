@@ -32,3 +32,7 @@ Thumbs.db
 # Environment
 .env
 .env.local
+
+# ProjectAtlas (local code index, machine-specific paths)
+.projectatlas/
+.mcp.json
