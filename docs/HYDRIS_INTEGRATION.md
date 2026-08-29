@@ -32,7 +32,7 @@ All confirmed against the installed `platform-proto` package, not guessed from d
 
 - **Engine runs off the Pi**, on a real host (laptop/NAS/Docker) — same pattern Hydris's own builtins (ADS-B, AIS, Meshtastic) use. The engine is a full Go+web-UI service, plus an embedded Bun runtime for plugins; more than a Pi Zero wants to carry alongside its own Flask+SQLite. Running the engine on-Pi would only make sense for a fully disconnected field kit acting as both sensor and operator station, which isn't this project.
 - **The Pi can't meaningfully sleep either way.** No ACPI/suspend-to-RAM on the Pi's SoC. Options are (a) stay booted and duty-cycle WiFi for modest (~20-40%) savings, or (b) hard power-cut via an external RTC timer (PiJuice, Witty Pi, TPL5110+MOSFET) between readings for real savings, at the cost of boot latency and no live dashboard between cycles. Either way, a node that can be power-cycled like that can only be a thin client — reinforces the engine-elsewhere decision above.
-- **RF:** only WiFi/BLE on-board (2.4GHz, no LoRa). WiFi is what's implemented. BLE would mean flipping the Pi into a GATT peripheral for a Hydris-side plugin to poll — real but nontrivial (BlueZ peripheral mode is less turnkey than scanning mode). For a genuinely remote site with no WiFi, Hydris has first-class Meshtastic (LoRa) support with an efficient Hydris-to-Hydris wire format — worth it only if WiFi coverage is actually the constraint.
+- **RF:** only WiFi/BLE on-board (2.4GHz, no LoRa). Both are implemented: WiFi pushes gRPC to the engine, and `HYDRIS_BLE=1` additionally flips the Pi into a GATT peripheral (see "BLE peripheral" below) for a Hydris-side plugin to consume. For a genuinely remote site with no WiFi, Hydris has first-class Meshtastic (LoRa) support with an efficient Hydris-to-Hydris wire format — worth it only if WiFi coverage is actually the constraint.
 - **Reaching the engine off-LAN:** `hydris --server ssh://...` or `--wireguard` tunnels gRPC through SSH/WireGuard rather than exposing 50051 directly. Default gRPC is plaintext.
 - **Federation between two Hydris nodes** requires a `routing: { channels: [{}] }` component on the entity — without it, entities stay node-local by default.
 
@@ -59,9 +59,19 @@ All confirmed against the installed `platform-proto` package, not guessed from d
             domain stays independent of any radio/hub being up.
 ```
 
-`model/entity_builder.py` is the only file that knows about the BME280; everything above it only ever handles a `world_pb2.Entity`. WiFi and BLE adapters move the identical serialized bytes (`entity.SerializeToString()`), so routing between them is a policy choice (`RouterMode.FAILOVER`/`BROADCAST` in `TransportRouter`), not two divergent code paths.
+`model/entity_builder.py` is the only file that knows about the BME280; everything above it only ever handles a `world_pb2.Entity`. Both adapters take the identical Entity; WiFi forwards it verbatim over gRPC, BLE maps it onto GATT characteristics (below). The router runs in `BROADCAST` because BLE isn't a fallback route to the same hub — it's a different consumer.
 
-BLE (`transport/ble_gatt.py`) is a structural sketch, not wired into either entry point's transport list yet — no `bluezero` installed, and no hub-side BLE receiver exists to test against.
+## BLE peripheral
+
+Enabled with `HYDRIS_BLE=1` (`HYDRIS_BLE_NAME` overrides the advertised name, default `hydris-weather`). Not chunked protobuf: a serialized Entity doesn't fit the 23-byte default MTU, and the hub-side plugin has no protobuf runtime on its BLE path. Instead, three GATT services:
+
+| Service | Characteristics | Purpose |
+|---|---|---|
+| `eef67fbe-b177-4705-857f-6a475536a66f` (custom, advertised) | metadata `7b264d39-…` (read): JSON `{v, id, label, lat, lon, alt}` | Discovery anchor — the Hydris engine records advertised UUIDs on `ble.device.*` entities and the plugin filters on this one. Metadata makes the station self-describing: the hub needs no per-station config. |
+| Environmental Sensing `0x181A` | temperature `0x2A6E` (sint16, 0.01 °C), humidity `0x2A6F` (uint16, 0.01 %), pressure `0x2A6D` (uint32, 0.1 Pa) — all read+notify, little-endian | The readings, in standard ESS encoding — single-MTU, verifiable with any BLE tool (nRF Connect shows real values). |
+| Device Information `0x180A` | manufacturer `2A29`, model `2A24`, serial `2A25` (Pi SoC serial), firmware `2A26` | Identity. The hub keys `unique_hardware_id` on the DIS serial (same convention as other Hydris BLE integrations), so the entity survives BLE address changes. |
+
+Threading: `bluezero`'s `publish()` owns the GLib mainloop on a daemon thread; `send()` hands characteristic updates over via `GLib.idle_add` — never touch BlueZ from the collector thread directly.
 
 ## Gotchas found while building this
 
@@ -75,7 +85,9 @@ BLE (`transport/ble_gatt.py`) is a structural sketch, not wired into either entr
 
 Verified end-to-end on real hardware (Pi Zero 2 W, armv7l, Bookworm) against a real Hydris.app instance, not a stand-in: `grpcio` installs from a prebuilt armv7l wheel, a real sensor reading round-trips through the full layer stack into Hydris's world model (confirmed via `GetEntity`), and `bme280.service` runs continuously via the fixed `install.sh` with `HYDRIS_SERVER` set through a systemd drop-in — local dashboard unaffected throughout.
 
-Not done: BLE transport (no receiver, not installed, not wired in), armv6l (original Pi Zero W — only tested on the newer Zero 2 W).
+BLE: implemented and wired into both entry points behind `HYDRIS_BLE=1`; encoding covered by `tests/test_ble_gatt.py`. The hub-side consumer is the separate `hydris-weather-ble-plugin` repo, which mirrors the ESS test vectors.
+
+Not done: armv6l (original Pi Zero W — only tested on the newer Zero 2 W).
 
 ## Future: native plugin
 

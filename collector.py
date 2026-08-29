@@ -17,11 +17,14 @@ from database import save_reading
 from model.entity_builder import StationConfig, build_weather_entity
 from reliability.pending_store import PendingEntityStore
 from routing.transport_router import RouterMode, TransportRouter
+from transport.ble_gatt import BleGattTransport
 from transport.grpc_wifi import GrpcWifiTransport
 
 INTERVAL_SECONDS = 30  # How often to read the sensor
 
 HYDRIS_SERVER = os.environ.get("HYDRIS_SERVER")
+HYDRIS_BLE = os.environ.get("HYDRIS_BLE") == "1"
+HYDRIS_BLE_NAME = os.environ.get("HYDRIS_BLE_NAME", "hydris-weather")
 HYDRIS_ENTITY_ID = os.environ.get("HYDRIS_ENTITY_ID", "pizero-01.weather")
 HYDRIS_LABEL = os.environ.get("HYDRIS_LABEL", "Pi Zero Weather Station")
 HYDRIS_LAT = float(os.environ.get("HYDRIS_LAT", "0"))
@@ -51,8 +54,14 @@ def main():
         entity_id=HYDRIS_ENTITY_ID, label=HYDRIS_LABEL,
         lat=HYDRIS_LAT, lon=HYDRIS_LON, alt=HYDRIS_ALT,
     )
-    transports = [GrpcWifiTransport(HYDRIS_SERVER)] if HYDRIS_SERVER else []
-    router = TransportRouter(transports, mode=RouterMode.FAILOVER)
+    transports = []
+    if HYDRIS_SERVER:
+        transports.append(GrpcWifiTransport(HYDRIS_SERVER))
+    if HYDRIS_BLE:
+        transports.append(BleGattTransport(station, device_name=HYDRIS_BLE_NAME))
+    # BROADCAST: BLE isn't an alternative route to the same hub, it's a
+    # different consumer (a nearby Hydris BLE central) -- feed both.
+    router = TransportRouter(transports, mode=RouterMode.BROADCAST)
     pending = PendingEntityStore()
 
     try:
