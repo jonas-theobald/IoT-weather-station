@@ -21,8 +21,53 @@ import (
 
 const dropinPath = "/etc/systemd/system/bme280.service.d/hydris.conf"
 
+// Emission control (EMCON). Radio state cannot touch the provisioning
+// link (USB is non-RF), so it is applied FIRST: enabling bluetooth
+// before the station restart lets the service's ExecStartPost re-add
+// the BLE advertisement -- externally registered adv instances die on
+// radio churn.
+func wifiAllowed(mode string) bool { return mode == "" || mode == "all" || mode == "wifi-only" }
+func bleAllowed(mode string) bool  { return mode == "" || mode == "all" || mode == "ble-only" }
+
+func validEmissionMode(mode string) bool {
+	switch mode {
+	case "", "all", "wifi-only", "ble-only", "silent":
+		return true
+	}
+	return false
+}
+
+func applyEmissionControl(mode string) error {
+	if mode == "" {
+		return nil // absent: leave the radios untouched
+	}
+	wifi, ble := "off", "block"
+	if wifiAllowed(mode) {
+		wifi = "on"
+	}
+	if bleAllowed(mode) {
+		ble = "unblock"
+	}
+	// Both persist across reboots (NetworkManager state / systemd-rfkill).
+	if err := run("nmcli", "radio", "wifi", wifi); err != nil {
+		return fmt.Errorf("wifi radio: %w", err)
+	}
+	if err := run("/usr/sbin/rfkill", ble, "bluetooth"); err != nil {
+		return fmt.Errorf("bluetooth radio: %w", err)
+	}
+	return nil
+}
+
 func applyConfig(cfg *pb.ConfigurationComponent) error {
 	values := cfg.GetValue().AsMap()
+
+	mode, _ := values["emission_mode"].(string)
+	if !validEmissionMode(mode) {
+		return fmt.Errorf("unknown emission_mode %q", mode)
+	}
+	if err := applyEmissionControl(mode); err != nil {
+		return err
+	}
 
 	// identify is an action riding the config channel, not a setting:
 	// execute it, then treat it like the PSK -- never persisted.
@@ -31,7 +76,7 @@ func applyConfig(cfg *pb.ConfigurationComponent) error {
 	}
 	delete(values, "identify")
 
-	if ssid, _ := values["wifi_ssid"].(string); ssid != "" {
+	if ssid, _ := values["wifi_ssid"].(string); ssid != "" && wifiAllowed(mode) {
 		if cc, _ := values["wifi_country"].(string); cc != "" {
 			if err := run("raspi-config", "nonint", "do_wifi_country", cc); err != nil {
 				return fmt.Errorf("wifi country: %w", err)
@@ -70,7 +115,10 @@ func writeHydrisDropin(v map[string]any) error {
 	if s, _ := v["label"].(string); s != "" {
 		add("HYDRIS_LABEL", s)
 	}
-	if on, _ := v["ble_enabled"].(bool); on {
+	// The app layer follows the radio: no BLE peripheral when emission
+	// control has the bluetooth radio off.
+	mode, _ := v["emission_mode"].(string)
+	if on, _ := v["ble_enabled"].(bool); on && bleAllowed(mode) {
 		add("HYDRIS_BLE", "1")
 	}
 	if s, _ := v["ble_name"].(string); s != "" {

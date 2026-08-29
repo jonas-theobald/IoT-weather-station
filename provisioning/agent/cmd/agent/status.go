@@ -31,6 +31,8 @@ const (
 	metricCPUTemp        = 21
 	metricWifiRSSI       = 22
 	metricStationService = 23
+	metricWifiRadio      = 27 // emission control: live radio truth
+	metricBleRadio       = 28
 )
 
 type appliedState struct {
@@ -90,6 +92,20 @@ func statusEntity(sn string) *pb.Entity {
 		active = 1
 	}
 	metric(metricStationService, "Station service", nil, pb.MetricUnit_MetricUnitCount, active)
+
+	// Emission control truth: what the radios ACTUALLY are, not what
+	// config asked for.
+	wifiRadio := 0.0
+	if out, err := exec.Command("nmcli", "radio", "wifi").Output(); err == nil &&
+		strings.TrimSpace(string(out)) == "enabled" {
+		wifiRadio = 1
+	}
+	metric(metricWifiRadio, "WiFi radio", nil, pb.MetricUnit_MetricUnitCount, wifiRadio)
+	bleRadio := 0.0
+	if bluetoothUnblocked() {
+		bleRadio = 1
+	}
+	metric(metricBleRadio, "Bluetooth radio", nil, pb.MetricUnit_MetricUnitCount, bleRadio)
 	e.Metric = &pb.MetricComponent{Metrics: metrics}
 
 	if ip := wlanIP(); ip != "" {
@@ -130,6 +146,24 @@ func wifiRSSI() (float64, bool) {
 		}
 	}
 	return 0, false
+}
+
+// bluetoothUnblocked reads rfkill state from sysfs -- soft==0 on the
+// bluetooth entry means the radio is allowed to emit.
+func bluetoothUnblocked() bool {
+	entries, err := os.ReadDir("/sys/class/rfkill")
+	if err != nil {
+		return false
+	}
+	for _, ent := range entries {
+		base := "/sys/class/rfkill/" + ent.Name()
+		if t, err := os.ReadFile(base + "/type"); err == nil &&
+			strings.TrimSpace(string(t)) == "bluetooth" {
+			soft, err := os.ReadFile(base + "/soft")
+			return err == nil && strings.TrimSpace(string(soft)) == "0"
+		}
+	}
+	return false
 }
 
 func wlanIP() string {

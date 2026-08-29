@@ -69,12 +69,31 @@ Metric id namespace (shared discipline across the system):
 | 10–11 | transports | "WiFi updates" / "BLE updates" counters |
 | 20–23 | agent | uptime, CPU temp, WiFi signal, station service state |
 | 24–26 | plugin | sensor check — live readings pulled through the USB cable |
+| 27–28 | agent | emission control truth: WiFi radio / Bluetooth radio actually on |
 
 Config keys: `wifi_ssid`, `wifi_psk` (write-only), `wifi_country`,
 `hydris_server`, `ble_enabled`, `ble_name`, `entity_id`, `label`,
-`interval_seconds`, `identify` (action, not persisted). Ack semantics:
-the plugin sets `configurable.applied_version = config.version` after
-a successful apply.
+`interval_seconds`, `emission_mode`, `identify` (action, not
+persisted). Ack semantics: the plugin sets
+`configurable.applied_version = config.version` after a successful
+apply.
+
+### Emission control (EMCON)
+
+`emission_mode` ∈ `all` | `wifi-only` | `ble-only` | `silent` — which
+radios may emit. Absent = radios untouched. Applied via
+`nmcli radio wifi` and `rfkill block bluetooth` (both persist across
+reboots), **first** in the apply sequence — radio state can't touch
+the USB provisioning link, and enabling bluetooth before the station
+restart lets `ExecStartPost` re-register the BLE advertisement
+(externally registered adv instances die on radio churn). The app
+layer follows: no BLE peripheral while the bluetooth radio is blocked.
+
+**`ble-only` and `silent` cut WiFi — and SSH and the gRPC push with
+it.** That is the feature, not a bug: a silenced station keeps
+logging locally, and the USB provisioning channel remains the non-RF
+way to reach it and lift the restriction. Don't set these modes
+remotely-by-habit; set them with the cable in hand.
 
 ## Desk CLI
 
