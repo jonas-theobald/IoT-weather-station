@@ -540,7 +540,16 @@ The throwaway `Push`-only server above proved the wire format round-trips; it co
  ]},"sensor":{}}
 ```
 
-This closes the last major open item from the WiFi path — end-to-end, real hardware to real engine, matches the "Weather Station" pattern from Section 3 exactly. What's not yet done is making this persistent (the Pi has no systemd service running this automatically yet — this was a one-off manual push, not `start_all.py` running continuously with `HYDRIS_SERVER` set via `bme280.service`).
+This closes the last major open item from the WiFi path — end-to-end, real hardware to real engine, matches the "Weather Station" pattern from Section 3 exactly.
+
+### Made persistent: a real, running deployment
+
+Installed for real via `install.sh`, which surfaced two more bugs only visible by actually running it (both fixed and committed):
+
+- `User=pi` was hardcoded into the service file, and the script's attempt to fix it matched a dead path (`/home/jtheobald`, the original author's own home directory) that never appears in the checked-in file — so the user was silently never corrected. Any install where the actual username isn't literally `pi` (e.g. a custom user set via Raspberry Pi Imager's Advanced Options, as here) failed at boot with "user pi does not exist". Fixed to rewrite `User=` from `$USER`.
+- The file-copy step only ever globbed root-level `*.py` files — fine when the repo was flat, but `model/`, `transport/`, `routing/`, `reliability/` are real packages now. The installed service crashed immediately with `ModuleNotFoundError: No module named 'model'`. Fixed to also copy any subdirectory containing an `__init__.py`, generically rather than hardcoding the four current package names.
+
+`HYDRIS_SERVER` and the station config are set via a systemd drop-in (`/etc/systemd/system/bme280.service.d/hydris.conf`) rather than baked into the tracked `bme280.service` — keeps the committed file portable (no machine-specific LAN IP in git history) while making this specific deployment work. `bme280.service` is now `active`/`enabled` on the test Pi Zero 2 W, pushing every `INTERVAL_SECONDS` (10s) continuously — confirmed by watching `measuredAt` advance across repeated `GetEntity` calls — with the local SQLite/Flask dashboard (`/api/readings`) unaffected and running in parallel, exactly as designed.
 
 ## 11. Future path: a real native plugin
 
