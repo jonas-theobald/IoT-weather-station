@@ -10,7 +10,6 @@ grpcio>=1.60.0
 protobuf>=5.0.0
 platform-proto @ git+https://github.com/projectqai/proto.git#subdirectory=python
 
-# BLE transport (transport/ble_gatt.py) is a structural sketch, not wired
-# up or tested yet -- see docs/HYDRIS_INTEGRATION.md Section 10, items 5-7.
-# Uncomment once there is a hub-side BLE receiver to test against:
-# bluezero>=0.8.0
+# BLE GATT peripheral (transport/ble_gatt.py). Only imported when
+# HYDRIS_BLE=1; needs BlueZ >= 5.50 on the Pi (Bookworm ships 5.66).
+bluezero>=0.8.0
