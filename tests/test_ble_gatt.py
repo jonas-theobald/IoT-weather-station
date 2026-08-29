@@ -53,11 +53,11 @@ class EssEncodingTest(unittest.TestCase):
         )
 
     def test_metadata_shape(self):
-        meta = json.loads(station_metadata(STATION))
+        meta = json.loads(station_metadata(STATION, "0000000012345678"))
         self.assertEqual(
             meta,
             {"v": 1, "id": "pizero-01.weather", "label": "Pi Zero Weather Station",
-             "lat": 49.44, "lon": 7.77, "alt": 251.0},
+             "lat": 49.44, "lon": 7.77, "alt": 251.0, "serial": "0000000012345678"},
         )
 
 

@@ -67,11 +67,19 @@ Enabled with `HYDRIS_BLE=1` (`HYDRIS_BLE_NAME` overrides the advertised name, de
 
 | Service | Characteristics | Purpose |
 |---|---|---|
-| `eef67fbe-b177-4705-857f-6a475536a66f` (custom, advertised) | metadata `7b264d39-…` (read): JSON `{v, id, label, lat, lon, alt}` | Discovery anchor — the Hydris engine records advertised UUIDs on `ble.device.*` entities and the plugin filters on this one. Metadata makes the station self-describing: the hub needs no per-station config. |
+| `eef67fbe-b177-4705-857f-6a475536a66f` (custom, advertised) | metadata `7b264d39-…` (read): JSON `{v, id, label, lat, lon, alt, serial}` | Discovery anchor — the Hydris engine records advertised UUIDs on `ble.device.*` entities and the plugin filters on this one. Metadata makes the station self-describing (no per-station hub config) and carries the identity serial. |
 | Environmental Sensing `0x181A` | temperature `0x2A6E` (sint16, 0.01 °C), humidity `0x2A6F` (uint16, 0.01 %), pressure `0x2A6D` (uint32, 0.1 Pa) — all read+notify, little-endian | The readings, in standard ESS encoding — single-MTU, verifiable with any BLE tool (nRF Connect shows real values). |
-| Device Information `0x180A` | manufacturer `2A29`, model `2A24`, serial `2A25` (Pi SoC serial), firmware `2A26` | Identity. The hub keys `unique_hardware_id` on the DIS serial (same convention as other Hydris BLE integrations), so the entity survives BLE address changes. |
+| Device Information `0x180A` | manufacturer `2A29`, model `2A24`, serial `2A25` (Pi SoC serial), firmware `2A26` | BLE-tool interop only. The hub never reads it: bluetoothd exposes its own built-in `0x180A`, so a central asking for DIS can land on the wrong instance. Identity (`unique_hardware_id`) comes from the metadata serial instead. |
 
 Threading: `bluezero`'s `publish()` owns the GLib mainloop on a daemon thread; `send()` hands characteristic updates over via `GLib.idle_add` — never touch BlueZ from the collector thread directly.
+
+### BLE gotchas (each one cost real debugging on a Pi Zero 2 W)
+
+- **bluezero read callbacks must introspect as zero-argument callables.** bluezero inspects the callback signature; anything with one visible parameter — a `lambda u=uuid:` default-arg closure counts — gets called with the D-Bus *options dict* as that argument, throws, and the central sees ATT "Unlikely error" (0x0E) with nothing in the Pi journal. Use `functools.partial` with everything bound.
+- **Kernel ext-adv MGMT bug (Pi OS Bookworm, 6.12 rpt kernel, Zero 2 W):** bluetoothd registers advertisements via `Add Extended Advertising Data (0x0055)` and the kernel answers `Invalid Parameters (0x0d)` even for a minimal 3-byte flags payload — every D-Bus advertisement (bluezero, even `bluetoothctl advertise on`) fails, while GATT registration works fine. The legacy MGMT op still works, so the advert is registered out-of-band: `btmgmt add-adv -u <station uuid> -c -g 1`, persisted as a systemd drop-in (`bme280.service.d/ble-adv-workaround.conf`, `ExecStartPost=-+/usr/bin/btmgmt add-adv …`, `ExecStopPost=-+/usr/bin/btmgmt rm-adv 1`). Diagnose with `btmon` — bluetoothd's own journal only says "Failed to add advertisement".
+- **`bluetoothd`'s built-in DIS collides with an app-provided one** (two `0x180A` instances in the ATT database). Hence: hub identity via the metadata characteristic, never via reading our DIS copy.
+- **Component merge flap (open):** both transports push a `device` component and the engine whole-replaces components, so the hub plugin's `parent`/`category`/`unique_hardware_id` are clobbered by the next WiFi push until reconnect. Fix is to make both paths push an identical `device` component.
+- **PyGObject/dbus for `bluezero` on the Pi:** don't build from pip (fails without gi dev headers) — `apt install python3-gi python3-dbus`, expose them to the venv (`system-gi.pth` with `/usr/lib/python3/dist-packages`), then `pip install --no-deps bluezero`.
 
 ## Gotchas found while building this
 
