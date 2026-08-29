@@ -1,6 +1,6 @@
 # Pi Zero BME280 Environment Monitor
 
-A lightweight IoT environmental monitoring system for Raspberry Pi Zero. Collects temperature, humidity, and barometric pressure data from a BME280 sensor and displays it on a real-time web dashboard.
+A lightweight IoT environmental monitoring system for Raspberry Pi Zero. Collects temperature, humidity, and barometric pressure data from a BME280 sensor, displays it on a real-time web dashboard, and can publish into a [Hydris](https://github.com/projectqai/hydris) engine over WiFi (gRPC) and BLE (GATT peripheral).
 
 <img width="617" height="670" alt="image" src="https://github.com/user-attachments/assets/0341b7b4-d11a-48d6-9cf6-b20f582acf32" />
 
@@ -14,6 +14,8 @@ A lightweight IoT environmental monitoring system for Raspberry Pi Zero. Collect
 - **Auto-start service** - Runs automatically on boot via systemd
 - **Mobile-friendly** - Responsive design works on phones and tablets
 - **Low power** - Runs on Pi Zero 2 W with ~150mA draw
+- **Hydris publishing** - Optional gRPC push into a Hydris engine over WiFi
+- **BLE GATT peripheral** - Optional standard Environmental Sensing Service, consumed by the [hydris-weather-ble-plugin](https://github.com/jonas-theobald/hydris-weather-ble-plugin) hub plugin
 
 ## Hardware Requirements
 
@@ -68,9 +70,9 @@ chmod +x install.sh
 
 ### 4. Access the Dashboard
 
-Open in your browser:
+Open in your browser (replace with your Pi's hostname):
 ```
-http://pizero.local:5000
+http://<hostname>.local:5000
 ```
 
 Or use the Pi's IP address: `http://<PI_IP>:5000`
@@ -104,16 +106,30 @@ sudo systemctl start bme280
 ## Project Structure
 
 ```
-piZero_BME280/
-├── start_all.py        # Main entry point (collector + web server)
-├── web_server.py       # Flask web server with dashboard
-├── database.py         # SQLite database operations
-├── collector.py        # Standalone data collector
-├── read_bme280.py      # Simple sensor test script
-├── bme280.service      # Systemd service definition
-├── install.sh          # Automated installation script
-├── requirements.txt    # Python dependencies
-└── README.md           # This file
+IoT-weather-station/
+├── start_all.py            # Main entry point (collector + web server)
+├── web_server.py           # Flask web server with dashboard
+├── database.py             # SQLite database operations
+├── collector.py            # Standalone data collector
+├── read_bme280.py          # Simple sensor test script
+├── model/
+│   └── entity_builder.py   # BME280 reading -> world.proto Entity
+├── transport/
+│   ├── grpc_wifi.py        # WiFi transport: WorldService.Push over gRPC
+│   └── ble_gatt.py         # BLE transport: GATT peripheral (ESS + DIS)
+├── routing/
+│   └── transport_router.py # Broadcast/failover across transports
+├── reliability/
+│   └── pending_store.py    # Retry buffer for failed pushes
+├── tools/
+│   └── simulate_station.py # Push synthetic readings without hardware
+├── tests/                  # Wire-format and entity tests
+├── docs/
+│   ├── HYDRIS_INTEGRATION.md  # Architecture, entity model, BLE gotchas
+│   └── WIRING.md
+├── bme280.service          # Systemd service definition
+├── install.sh              # Automated installation script
+└── requirements.txt        # Python dependencies
 ```
 
 ## Configuration
@@ -137,6 +153,37 @@ setInterval(updateData, 10000);  // milliseconds
 Most BME280 modules use `0x76` or `0x77`. The code auto-detects, but you can force an address in `start_all.py`:
 ```python
 sensor = create_sensor(address=0x77)
+```
+
+## Hydris Integration (optional)
+
+If no Hydris variable is set, the station runs standalone and none of this is active. Configuration is via environment variables, typically a systemd drop-in:
+
+```bash
+sudo systemctl edit bme280
+```
+
+```ini
+[Service]
+Environment=HYDRIS_SERVER=<engine-host>:50051
+Environment=HYDRIS_BLE=1
+```
+
+| Variable | Default | Purpose |
+|---|---|---|
+| `HYDRIS_SERVER` | unset | Engine address for the WiFi/gRPC push (`host:port`) |
+| `HYDRIS_BLE` | unset | `1` enables the BLE GATT peripheral |
+| `HYDRIS_BLE_NAME` | `hydris-weather` | Advertised BLE local name |
+| `HYDRIS_ENTITY_ID` | `pizero-01.weather` | Entity id in the Hydris world model |
+| `HYDRIS_LABEL` | `Pi Zero Weather Station` | Entity label |
+
+There is deliberately no position configuration: the station never pushes `geo`. Place it on the map in Hydris — that placement persists.
+
+Both transports feed the **same entity**. The BLE side is consumed by the [hydris-weather-ble-plugin](https://github.com/jonas-theobald/hydris-weather-ble-plugin) running in the engine; it adds the RSSI link and keys identity on the Pi's SoC serial. Architecture, the entity model, the GATT contract, and the hard-won BLE gotchas (kernel advertising bug and friends) are in [docs/HYDRIS_INTEGRATION.md](docs/HYDRIS_INTEGRATION.md).
+
+Test the engine path without hardware:
+```bash
+python tools/simulate_station.py --server localhost:50051
 ```
 
 ## Service Management
@@ -192,6 +239,7 @@ sudo systemctl disable bme280
 | Service won't start | Check logs: `journalctl -u bme280 -e` |
 | Dashboard not loading | Verify service is running: `systemctl status bme280` |
 | Can't access from network | Check firewall: `sudo ufw allow 5000` |
+| BLE not advertising / hub can't see the station | See the BLE gotchas in [docs/HYDRIS_INTEGRATION.md](docs/HYDRIS_INTEGRATION.md) — some Pi kernels need the `btmgmt` advertising workaround |
 
 ## Storage Requirements
 

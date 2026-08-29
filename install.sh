@@ -1,7 +1,7 @@
 #!/bin/bash
 #
 # Pi Zero BME280 Environment Monitor - Installation Script
-# https://github.com/YOUR_USERNAME/piZero_BME280
+# https://github.com/jonas-theobald/IoT-weather-station
 #
 
 set -e
@@ -62,7 +62,10 @@ fi
 # Install system dependencies
 echo -e "${YELLOW}[3/6]${NC} Installing system dependencies..."
 sudo apt-get update -qq
-sudo apt-get install -y -qq python3-pip python3-venv i2c-tools
+# python3-gi/python3-dbus: bluezero (BLE transport) needs the distro's
+# PyGObject/dbus bindings -- building them inside a venv fails without
+# the gi development headers.
+sudo apt-get install -y -qq python3-pip python3-venv i2c-tools python3-gi python3-dbus
 
 # Create virtual environment
 echo -e "${YELLOW}[4/6]${NC} Setting up Python virtual environment..."
@@ -92,6 +95,11 @@ fi
 source "$VENV_DIR/bin/activate"
 pip install --quiet --upgrade pip
 pip install --quiet -r "$INSTALL_DIR/requirements.txt"
+# Expose the system gi/dbus bindings to the venv, then add bluezero on
+# top without its deps (they'd otherwise try to build PyGObject).
+SITE_PACKAGES=$(python -c "import site; print(site.getsitepackages()[0])")
+echo /usr/lib/python3/dist-packages > "$SITE_PACKAGES/system-gi.pth"
+pip install --quiet --no-deps bluezero
 deactivate
 
 # Update service file with correct paths
