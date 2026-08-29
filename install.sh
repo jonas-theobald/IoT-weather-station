@@ -74,6 +74,14 @@ mkdir -p "$INSTALL_DIR"
 cp -r ./*.py "$INSTALL_DIR/" 2>/dev/null || true
 cp -r ./requirements.txt "$INSTALL_DIR/" 2>/dev/null || true
 cp -r ./bme280.service "$INSTALL_DIR/" 2>/dev/null || true
+# Python package subdirectories (e.g. model/, transport/, routing/,
+# reliability/ for the Hydris client) -- a flat *.py glob misses these.
+for pkg_dir in ./*/; do
+    pkg_dir="${pkg_dir%/}"
+    if [ -f "$pkg_dir/__init__.py" ]; then
+        cp -r "$pkg_dir" "$INSTALL_DIR/"
+    fi
+done
 
 # Create venv if it doesn't exist
 if [ ! -d "$VENV_DIR" ]; then
