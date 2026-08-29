@@ -39,3 +39,4 @@ Thumbs.db
 
 # Go build artifact (cross-compiled for the Pi)
 provisioning/agent/provision-agent
+provisioning/agent/poke
