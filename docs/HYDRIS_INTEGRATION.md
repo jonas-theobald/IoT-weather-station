@@ -523,7 +523,24 @@ Everything above was originally built and checked in a macOS venv; the following
 - A real sensor reading (25.6°C, 35.0% RH, 981.4 hPa) was run through `build_weather_entity()` → `TransportRouter` → a minimal throwaway gRPC server implementing just `WorldService.Push` — confirming a **successful** push end-to-end (not just the clean-failure path tested earlier): the fake server received `kind=1/unit=1` (Temperature/Celsius), `kind=3/unit=20` (Humidity/Percent), `kind=2/unit=10` (Pressure/Hectopascal) — exactly the enum values expected, and `pending.clear()` fired correctly on success.
 - `start_all.py` (the actual systemd entry point) was run as-is: with `HYDRIS_SERVER` unset it behaves identically to before this change (SQLite write + working `/api/readings` dashboard, no Hydris code path touched); with `HYDRIS_SERVER` pointed at a dead port, local logging and the dashboard kept working, `save_reading()` never affected.
 
-**Still genuinely unverified**: the original Pi Zero W's `armv6l` wheel availability — this test hardware is the newer Pi Zero 2 W, a different architecture. And this was checked against a hand-written stand-in for exactly one RPC (`Push`); it hasn't been checked against the real Hydris engine binary, which may reject or handle the request differently in ways a minimal fake server can't surface.
+**Still genuinely unverified**: the original Pi Zero W's `armv6l` wheel availability — this test hardware is the newer Pi Zero 2 W, a different architecture.
+
+### Verified against the real Hydris engine, not a stand-in
+
+The throwaway `Push`-only server above proved the wire format round-trips; it couldn't prove the real engine accepts and stores it the same way. It does: with a real Hydris desktop instance running on the LAN (`/Applications/Hydris.app` on a Mac, reachable at `<mac-lan-ip>:50051`), the same `GrpcWifiTransport` push from the Pi returned `ok=True`, and `GetEntity` against Hydris's own HTTP/JSON bridge confirmed the entity landed in the world model exactly as designed — `geo`, `device.class`/`device.state`, and all three metrics with their `range` bounds intact:
+
+```json
+{"id":"pizero-01.weather","label":"Pi Zero Weather Station",
+ "geo":{"longitude":13.4,"latitude":52.52,"altitude":34},
+ "device":{"state":"DeviceStateActive","class":"weather"},
+ "metric":{"metrics":[
+   {"kind":"MetricKindTemperature","unit":"MetricUnitCelsius","double":25.64,"range":{"minDouble":-40,"maxDouble":85}},
+   {"kind":"MetricKindHumidity","unit":"MetricUnitPercent","double":34.52,"range":{"minDouble":0,"maxDouble":100}},
+   {"kind":"MetricKindPressure","unit":"MetricUnitHectopascal","double":981.32,"range":{"minDouble":300,"maxDouble":1100}}
+ ]},"sensor":{}}
+```
+
+This closes the last major open item from the WiFi path — end-to-end, real hardware to real engine, matches the "Weather Station" pattern from Section 3 exactly. What's not yet done is making this persistent (the Pi has no systemd service running this automatically yet — this was a one-off manual push, not `start_all.py` running continuously with `HYDRIS_SERVER` set via `bme280.service`).
 
 ## 11. Future path: a real native plugin
 
