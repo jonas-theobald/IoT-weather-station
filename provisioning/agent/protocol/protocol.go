@@ -11,3 +11,11 @@ const (
 
 	RespBit = 0x80
 )
+
+// Generic named-value access, payloads are google.protobuf.Struct (the
+// same value type world.proto configs use). The agent exposes a
+// WHITELIST of keys, never a shell.
+const (
+	TypeRead  = 0x04 // Struct{keys:[...]} -> Struct{key: values}
+	TypeWrite = 0x05 // Struct{key: arg}   -> Struct{key: result}
+)

@@ -14,6 +14,7 @@ import (
 	pb "github.com/projectqai/proto/go" // generated package is "_go"; always alias
 	"golang.org/x/sys/unix"
 	"google.golang.org/protobuf/proto"
+	"google.golang.org/protobuf/types/known/structpb"
 
 	"github.com/jonas-theobald/IoT-weather-station/provisioning/agent/framing"
 	"github.com/jonas-theobald/IoT-weather-station/provisioning/agent/protocol"
@@ -75,6 +76,24 @@ func handle(w *os.File, sn string, fr framing.Frame) error {
 			return statusEntity(sn) // re-read: report what is now true
 		}()
 		return respond(w, sn, fr, entity)
+
+	case protocol.TypeRead, protocol.TypeWrite:
+		var req structpb.Struct
+		if err := proto.Unmarshal(fr.Payload, &req); err != nil {
+			return err
+		}
+		var resp *structpb.Struct
+		if fr.Type == protocol.TypeRead {
+			resp = handleRead(&req)
+		} else {
+			resp = handleWrite(&req)
+		}
+		payload, err := proto.Marshal(resp)
+		if err != nil {
+			return err
+		}
+		_, err = w.Write(framing.Encode(fr.Type|protocol.RespBit, fr.Seq, payload))
+		return err
 
 	default:
 		log.Printf("ignoring unknown frame type 0x%02x", fr.Type)

@@ -24,6 +24,13 @@ const dropinPath = "/etc/systemd/system/bme280.service.d/hydris.conf"
 func applyConfig(cfg *pb.ConfigurationComponent) error {
 	values := cfg.GetValue().AsMap()
 
+	// identify is an action riding the config channel, not a setting:
+	// execute it, then treat it like the PSK -- never persisted.
+	if on, _ := values["identify"].(bool); on {
+		go blinkLED(15)
+	}
+	delete(values, "identify")
+
 	if ssid, _ := values["wifi_ssid"].(string); ssid != "" {
 		if cc, _ := values["wifi_country"].(string); cc != "" {
 			if err := run("raspi-config", "nonint", "do_wifi_country", cc); err != nil {
