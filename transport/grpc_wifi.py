@@ -1,8 +1,4 @@
-"""
-Native transport: gRPC already speaks world.proto directly (it IS
-protobuf over HTTP/2), so this adapter does no translation -- it hands
-the Entity straight to WorldService.Push.
-"""
+"""gRPC already speaks world.proto directly -- no translation, just hands the Entity to WorldService.Push."""
 
 import socket
 

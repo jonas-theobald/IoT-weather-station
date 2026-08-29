@@ -1,7 +1,4 @@
-"""
-The only place that decides WiFi vs. BLE vs. both. Everything below this
-is transport-agnostic; everything above it only calls router.send().
-"""
+"""The only place that decides WiFi vs. BLE vs. both."""
 
 from enum import Enum, auto
 
