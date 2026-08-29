@@ -514,7 +514,16 @@ Specific to the BLE path (`transport/ble_gatt.py`, Section 9.4) — untouched by
 5. **The hub-side BLE receiver doesn't exist and isn't optional.** A Pi advertising entity bytes over GATT does nothing on its own — something has to run as the BLE central, connect in, reassemble chunks, and call `WorldService.Push`: either a Hydris plugin using `Hydris.bluetooth.requestDevice()`/`openBLEStream()` from inside the engine, or a standalone bridge daemon. This has to exist before BLE is anything more than a structural placeholder.
 6. `BleGattTransport.is_available()` is honestly still a stub returning `True` unconditionally — BLE peripheral mode has no local equivalent of WiFi's "am I associated." A meaningful check needs to track whether a central is connected and subscribed (BlueZ exposes this via D-Bus properties), not implemented here.
 7. `bluezero`'s peripheral/GATT-server API surface was not installed or exercised in this pass (deliberately, per the build task's scope) — the import and constructor calls in `transport/ble_gatt.py` are unverified against a real BlueZ stack.
-8. Everything in this file was built and tested in a macOS venv, not on the actual Pi Zero hardware or against a running Hydris engine — a real push (as opposed to a cleanly-handled failed push) is still unverified, and so is `grpcio`'s wheel availability on `armv6l` (Section 9.8).
+### Verified on real hardware
+
+Everything above was originally built and checked in a macOS venv; the following was then re-verified directly on the actual target device over SSH (a Pi Zero 2 W, hostname `raspberrypi`, `armv7l`, Debian Bookworm, Python 3.11.2):
+
+- `pip install -r requirements.txt` — **`grpcio` installed from a prebuilt wheel** (`grpcio-1.83.1-cp311-cp311-linux_armv7l.whl`), no from-source build, full install in ~1 minute. Resolves the `armv7l` half of the wheel-availability concern in Section 9.8.
+- I2C had to be enabled first (`dtparam=i2c_arm=on` was commented out — a fresh SD card image doesn't turn this on by itself, matching the README's own "Enable I2C" step). Once enabled and rebooted, `i2cdetect -y 1` found the BME280 at `0x77`.
+- A real sensor reading (25.6°C, 35.0% RH, 981.4 hPa) was run through `build_weather_entity()` → `TransportRouter` → a minimal throwaway gRPC server implementing just `WorldService.Push` — confirming a **successful** push end-to-end (not just the clean-failure path tested earlier): the fake server received `kind=1/unit=1` (Temperature/Celsius), `kind=3/unit=20` (Humidity/Percent), `kind=2/unit=10` (Pressure/Hectopascal) — exactly the enum values expected, and `pending.clear()` fired correctly on success.
+- `start_all.py` (the actual systemd entry point) was run as-is: with `HYDRIS_SERVER` unset it behaves identically to before this change (SQLite write + working `/api/readings` dashboard, no Hydris code path touched); with `HYDRIS_SERVER` pointed at a dead port, local logging and the dashboard kept working, `save_reading()` never affected.
+
+**Still genuinely unverified**: the original Pi Zero W's `armv6l` wheel availability — this test hardware is the newer Pi Zero 2 W, a different architecture. And this was checked against a hand-written stand-in for exactly one RPC (`Push`); it hasn't been checked against the real Hydris engine binary, which may reject or handle the request differently in ways a minimal fake server can't surface.
 
 ## 11. Future path: a real native plugin
 
