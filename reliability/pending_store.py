@@ -1,16 +1,5 @@
-"""
-Because Hydris merges the metric component additively by metric id with
-last-write-wins per id (Developer Guide -> Entity Merge & Synchronization),
-there's no value in queueing every failed reading -- only the freshest
-value per metric matters. This is intentionally the latest unsent Entity,
-not a FIFO of history.
-
-Named `reliability/`, not `queue/`: a top-level `queue/` package would
-shadow Python's stdlib `queue` module for the whole process once the repo
-root is on sys.path (confirmed while building this -- grpcio imports
-`queue` internally, and the stdlib module becomes unreachable the moment
-a local `queue/` directory sits earlier on the path).
-"""
+"""Holds the latest unsent Entity, not a FIFO -- Hydris merges metrics by
+id with last-write-wins, so only the freshest reading matters."""
 
 from __future__ import annotations  # `Entity | None` needs this on Python < 3.10 (e.g. Pi OS Bullseye's 3.9)
 

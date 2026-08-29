@@ -1,27 +1,5 @@
-"""
-The only module that knows both what a BME280 reading looks like and what
-world.proto expects. Everything above this layer speaks only
-platform_proto.world_pb2.Entity; swapping the sensor means touching only
-this file.
-
-Field/enum names below are verified against platform-proto 0.1.0
-(git+https://github.com/projectqai/proto.git#subdirectory=python), not
-guessed from the TypeScript docs:
-
-- Metrics types live in platform_proto.metrics_pb2, a separate module
-  from platform_proto.world_pb2.
-- MetricKindPressure / MetricUnitHectopascal exist exactly as named.
-- There is no MetricKindAltitude — altitude is intentionally left off the
-  metric list (see docs/HYDRIS_INTEGRATION.md, Section 3); geo.altitude
-  already carries the station's real, static altitude.
-- DeviceComponent's `class` field keeps its literal proto name in the
-  generated Python code (no `class_` alias) because `class` is a Python
-  keyword. It has to be set via dict-unpacking, e.g.
-  DeviceComponent(**{"class": "weather"}) — a bare `class=` kwarg is a
-  syntax error.
-- DeviceState values (e.g. DeviceStateActive) are plain int module-level
-  constants on world_pb2, not strings.
-"""
+"""Converts a BME280 reading into a world.proto Entity. The only module
+that knows about the sensor -- everything above this speaks Entity only."""
 
 from dataclasses import dataclass
 
@@ -45,15 +23,11 @@ class StationConfig:
 
 
 def build_weather_entity(reading: dict, station: StationConfig, measured_at) -> world_pb2.Entity:
-    """
-    reading: {"temperature_c": float, "humidity_percent": float, "pressure_hpa": float}
-              -- the same shape read_bme280.read_sensor() already returns.
-    measured_at: a timezone-aware datetime.datetime of when the reading was taken.
-    """
+    """reading: same shape as read_bme280.read_sensor(). measured_at: aware datetime."""
     ts = Timestamp()
     ts.FromDatetime(measured_at)
 
-    device = world_pb2.DeviceComponent(**{"class": "weather"})
+    device = world_pb2.DeviceComponent(**{"class": "weather"})  # `class` is a reserved word, no kwarg
     device.state = world_pb2.DeviceStateActive
 
     return world_pb2.Entity(

@@ -1,8 +1,4 @@
-"""
-Transport-agnostic port: everything above this layer only calls
-Transport.is_available()/send(entity) and never knows whether the bytes
-travel over WiFi, BLE, or anything added later.
-"""
+"""Transport-agnostic port -- callers never know whether bytes travel over WiFi, BLE, or anything added later."""
 
 from dataclasses import dataclass
 from enum import Enum, auto

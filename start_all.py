@@ -19,9 +19,7 @@ from transport.grpc_wifi import GrpcWifiTransport
 
 INTERVAL_SECONDS = 10
 
-# Hydris publishing is entirely independent of local logging above -- see
-# docs/HYDRIS_INTEGRATION.md Section 2. If HYDRIS_SERVER is unset, this
-# reduces to a router with no transports, and send() below is a no-op.
+# If unset, transports is empty and Hydris publishing below is a no-op.
 HYDRIS_SERVER = os.environ.get("HYDRIS_SERVER")
 HYDRIS_ENTITY_ID = os.environ.get("HYDRIS_ENTITY_ID", "pizero-01.weather")
 HYDRIS_LABEL = os.environ.get("HYDRIS_LABEL", "Pi Zero Weather Station")
@@ -82,8 +80,6 @@ def collector_loop():
                     pending.stash(entity)
                     print(f"Hydris push failed (continuing): {results}")
             except Exception as e:
-                # Must never take down local logging above -- see
-                # docs/HYDRIS_INTEGRATION.md Section 2.
                 print(f"Hydris publish error (continuing): {e}")
 
         time.sleep(INTERVAL_SECONDS)
