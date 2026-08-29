@@ -89,6 +89,13 @@ source ~/bme280-env/bin/activate
 # Install dependencies
 pip install -r requirements.txt
 
+# Only needed for the BLE peripheral (HYDRIS_BLE=1): bluezero's deps
+# won't build in a venv, so use the distro bindings instead
+sudo apt install python3-gi python3-dbus
+echo /usr/lib/python3/dist-packages > \
+  "$(python -c 'import site; print(site.getsitepackages()[0])')/system-gi.pth"
+pip install --no-deps bluezero
+
 # Verify sensor connection
 sudo i2cdetect -y 1
 # Should show 76 or 77
@@ -217,7 +224,7 @@ sudo systemctl disable bme280
 ```json
 {
   "latest": {
-    "timestamp": "2025-01-16T18:30:00",
+    "timestamp": "2026-01-16T18:30:00",
     "temperature": 23.5,
     "humidity": 45.2,
     "pressure": 1013.25
