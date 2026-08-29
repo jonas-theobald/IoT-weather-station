@@ -1,2 +1,16 @@
 adafruit-circuitpython-bme280>=2.6.0
 flask>=2.0.0
+
+# Hydris WiFi/gRPC publishing (Section 9 of docs/HYDRIS_INTEGRATION.md).
+# Optional at runtime -- if HYDRIS_SERVER isn't set, no transport is
+# constructed and none of this is exercised. grpcio ships prebuilt wheels
+# for armv7l/aarch64 (Pi Zero 2 W+) via piwheels; the original Pi Zero W
+# (armv6l) may need a from-source build -- smoke-test on the target board.
+grpcio>=1.60.0
+protobuf>=5.0.0
+platform-proto @ git+https://github.com/projectqai/proto.git#subdirectory=python
+
+# BLE transport (transport/ble_gatt.py) is a structural sketch, not wired
+# up or tested yet -- see docs/HYDRIS_INTEGRATION.md Section 10, items 5-7.
+# Uncomment once there is a hub-side BLE receiver to test against:
+# bluezero>=0.8.0
