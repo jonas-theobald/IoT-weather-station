@@ -20,7 +20,7 @@ import threading
 from platform_proto import metrics_pb2
 from platform_proto.world_pb2 import Entity
 
-from model.entity_builder import StationConfig
+from model.entity_builder import StationConfig, device_serial
 
 from .base import Transport, TransportKind, TransportResult
 
@@ -96,21 +96,6 @@ def station_metadata(station: StationConfig, serial: str) -> bytes:
         },
         separators=(",", ":"),
     ).encode()
-
-
-def device_serial() -> str:
-    """Pi SoC serial -- the hub keys entity identity on this (DIS 2A25),
-    so it must survive reboots and BLE address changes."""
-    try:
-        with open("/proc/cpuinfo") as f:
-            for line in f:
-                if line.startswith("Serial"):
-                    return line.split(":", 1)[1].strip()
-    except OSError:
-        pass
-    import uuid
-
-    return f"{uuid.getnode():012x}"  # non-Pi fallback: MAC as hex
 
 
 class BleGattTransport:
