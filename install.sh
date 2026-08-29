@@ -89,7 +89,7 @@ deactivate
 # Update service file with correct paths
 echo -e "${YELLOW}[5/6]${NC} Configuring systemd service..."
 SERVICE_FILE="$INSTALL_DIR/bme280.service"
-sed -i "s|/home/jtheobald|$HOME|g" "$SERVICE_FILE"
+sed -i "s|^User=.*|User=$USER|g" "$SERVICE_FILE"
 sed -i "s|WorkingDirectory=.*|WorkingDirectory=$INSTALL_DIR|g" "$SERVICE_FILE"
 sed -i "s|ExecStart=.*|ExecStart=$VENV_DIR/bin/python $INSTALL_DIR/start_all.py|g" "$SERVICE_FILE"
 
