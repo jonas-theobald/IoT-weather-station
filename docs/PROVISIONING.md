@@ -84,10 +84,12 @@ apply.
 radios may emit. Absent = radios untouched. Applied via
 `nmcli radio wifi` and `rfkill block bluetooth` (both persist across
 reboots), **first** in the apply sequence — radio state can't touch
-the USB provisioning link, and enabling bluetooth before the station
-restart lets `ExecStartPost` re-register the BLE advertisement
-(externally registered adv instances die on radio churn). The app
-layer follows: no BLE peripheral while the bluetooth radio is blocked.
+the USB provisioning link. After the radios are set the agent kicks
+`ble-advert.service`, the single owner of the BLE advertisement
+(externally registered adv instances die silently on radio churn and
+don't resume after a connection drops; its 60s reconcile timer is the
+guarantee, the kick just makes it prompt). The app layer follows: no
+BLE peripheral while the bluetooth radio is blocked.
 
 **`ble-only` and `silent` cut WiFi — and SSH and the gRPC push with
 it.** That is the feature, not a bug: a silenced station keeps
