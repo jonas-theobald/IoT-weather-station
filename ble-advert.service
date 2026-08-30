@@ -1,0 +1,8 @@
+[Unit]
+Description=Station BLE advertisement (btmgmt ext-adv workaround)
+After=bluetooth.service bme280.service
+PartOf=bluetooth.service
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/sbin/ble-advert-refresh

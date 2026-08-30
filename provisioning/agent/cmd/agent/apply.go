@@ -55,6 +55,11 @@ func applyEmissionControl(mode string) error {
 	if err := run("/usr/sbin/rfkill", ble, "bluetooth"); err != nil {
 		return fmt.Errorf("bluetooth radio: %w", err)
 	}
+	// Best-effort fast path after radio churn -- the ble-advert timer
+	// reconciles within 60s regardless.
+	if err := run("systemctl", "restart", "ble-advert"); err != nil {
+		log.Printf("ble-advert kick: %v", err)
+	}
 	return nil
 }
 

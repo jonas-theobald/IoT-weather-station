@@ -1,0 +1,15 @@
+#!/bin/bash
+# Reconcile the station BLE advertisement. bluetoothd's ext-adv registration
+# is rejected by the 6.12 rpt kernel, so the advert is registered out-of-band
+# via legacy btmgmt (see docs/HYDRIS_INTEGRATION.md). Level-triggered on
+# purpose: btmgmt can list an instance that is no longer on air, and adverts
+# don't resume after a connection drops -- so refresh unconditionally instead
+# of trusting advinfo.
+#
+# Desired state: advertising iff radio up AND GATT app up AND not connected.
+set -u
+hciconfig hci0 2>/dev/null | grep -q "UP RUNNING" || exit 0  # EMCON / radio down
+systemctl is-active --quiet bme280 || exit 0                 # no GATT app to advertise
+hcitool con 2>/dev/null | grep -q "handle" && exit 0         # connected: central found us
+/usr/bin/btmgmt rm-adv 1 >/dev/null 2>&1 || true
+exec /usr/bin/btmgmt add-adv -u eef67fbe-b177-4705-857f-6a475536a66f -c -g 1
