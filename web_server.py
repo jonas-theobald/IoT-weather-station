@@ -3,7 +3,15 @@ Flask web server to display BME280 sensor data.
 """
 
 from flask import Flask, jsonify, render_template_string, request
-from database import get_readings, get_readings_since, get_latest_reading
+from database import (
+    get_latest_reading,
+    get_max_reading_id,
+    get_readings,
+    get_readings_after,
+    get_readings_since,
+    get_sync_watermark,
+    set_sync_watermark,
+)
 
 app = Flask(__name__)
 
@@ -262,6 +270,45 @@ def api_readings():
             for r in history
         ]
     })
+
+
+@app.route('/api/sync/pending')
+def api_sync_pending():
+    """Store-and-forward: unacked readings for a named consumer, oldest
+    first. A consumer with no watermark starts at the newest reading --
+    the sync covers gaps from then on, it never replays history."""
+    name = request.args.get('name', default='usb', type=str)
+    limit = min(request.args.get('limit', default=200, type=int), 1000)
+    last = get_sync_watermark(name)
+    if last is None:
+        last = get_max_reading_id()
+        set_sync_watermark(name, last)
+    def utc(ts):
+        # DB timestamps are naive local time; the wire speaks UTC so the
+        # consumer never has to guess the station's timezone.
+        import datetime
+        return datetime.datetime.fromisoformat(ts).astimezone(
+            datetime.timezone.utc).isoformat()
+
+    return jsonify({
+        'watermark': last,
+        'readings': [
+            {'id': r[0], 'timestamp': utc(r[1]), 'temperature': r[2],
+             'humidity': r[3], 'pressure': r[4]}
+            for r in get_readings_after(last, limit)
+        ],
+    })
+
+
+@app.route('/api/sync/ack', methods=['POST'])
+def api_sync_ack():
+    body = request.get_json(force=True, silent=True) or {}
+    name = body.get('name', 'usb')
+    last_id = body.get('last_id')
+    if not isinstance(last_id, int) or last_id < 0:
+        return jsonify({'error': 'last_id required'}), 400
+    set_sync_watermark(name, last_id)
+    return jsonify({'ok': True, 'watermark': last_id})
 
 
 if __name__ == '__main__':
