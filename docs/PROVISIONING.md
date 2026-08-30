@@ -43,8 +43,18 @@ magic(2)=B2 80 | ver(1)=01 | type(1) | seq(1) | len(4 LE) | payload
 | `0x01` GetEntity | – → `world.Entity` | full status: applied config, metrics, IP, service state |
 | `0x02` Push | `EntityChangeRequest` → `world.Entity` | apply config; response reports what is now true |
 | `0x03` Event | `world.Entity` | reserved (unused — see polling note) |
-| `0x04` Read | `Struct{keys:[…]}` → `Struct` | whitelisted named reads: `sensor` (live BME280 via the station's local API), `system` (hostname/os/kernel/model) |
-| `0x05` Write | `Struct{key:arg}` → `Struct` | whitelisted actions: `identify` (blink ACT LED), `reboot` |
+| `0x04` Read | `Struct{keys:[…]}` → `Struct` | whitelisted named reads: `sensor` (live BME280 via the station's local API), `system` (hostname/os/kernel/model), `sync_pending` (store-and-forward: up to 200 unacked readings, UTC timestamps) |
+| `0x05` Write | `Struct{key:arg}` → `Struct` | whitelisted actions: `identify` (blink ACT LED), `reboot`, `sync_ack` (advance the station's durable `usb` watermark) |
+
+**Store-and-forward over the cable:** the station keeps a per-consumer
+watermark (`sync_state` in its SQLite, same mechanism as the WiFi path);
+the provisioner drains `sync_pending` every status poll and pushes
+metrics-only partial entities to the *station* entity (never a full
+entity — the WiFi path owns the entity shape), then acks. Two
+consequences: a radio-dark (EMCON `silent`) station hands over its whole
+history the moment a cable is plugged in, and while the cable stays in,
+the serial link continuously mirrors live readings (metric 12 "USB
+updates" on the station entity, next to 10 WiFi / 11 BLE).
 
 Responses echo the request type with the top bit set (`0x01→0x81`) and
 the same seq. **Status is host-polled (10 s), never agent-pushed:**

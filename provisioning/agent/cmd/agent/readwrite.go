@@ -28,6 +28,11 @@ func handleRead(req *structpb.Struct) *structpb.Struct {
 			out["sensor"] = readSensor()
 		case "system":
 			out["system"] = readSystem()
+		case "sync_pending":
+			// Store-and-forward over the cable: readings the hub hasn't
+			// acked, from the station's own API (the DB stays owned by
+			// one codebase). Ack comes back as a sync_ack write.
+			out["sync_pending"] = readSyncPending()
 		default:
 			out[k.GetStringValue()] = map[string]any{"error": "unknown key"}
 		}
@@ -59,12 +64,47 @@ func handleWrite(req *structpb.Struct) *structpb.Struct {
 				}()
 				out["reboot"] = "in 2s"
 			}
+		case "sync_ack":
+			id := int(val.GetNumberValue())
+			if id < 0 {
+				out["sync_ack"] = "bad id"
+				break
+			}
+			out["sync_ack"] = writeSyncAck(id)
 		default:
 			out[key] = "unknown key"
 		}
 	}
 	s, _ := structpb.NewStruct(out)
 	return s
+}
+
+func readSyncPending() map[string]any {
+	client := http.Client{Timeout: 5 * time.Second}
+	resp, err := client.Get("http://127.0.0.1:5000/api/sync/pending?name=usb&limit=200")
+	if err != nil {
+		return map[string]any{"error": fmt.Sprintf("station api: %v", err)}
+	}
+	defer resp.Body.Close()
+	var body map[string]any
+	if err := json.NewDecoder(resp.Body).Decode(&body); err != nil {
+		return map[string]any{"error": fmt.Sprintf("station api: %v", err)}
+	}
+	return body
+}
+
+func writeSyncAck(lastID int) string {
+	client := http.Client{Timeout: 5 * time.Second}
+	payload := strings.NewReader(fmt.Sprintf(`{"name":"usb","last_id":%d}`, lastID))
+	resp, err := client.Post("http://127.0.0.1:5000/api/sync/ack", "application/json", payload)
+	if err != nil {
+		return fmt.Sprintf("station api: %v", err)
+	}
+	resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		return fmt.Sprintf("station api: HTTP %d", resp.StatusCode)
+	}
+	return "ok"
 }
 
 // readSensor asks the station's local dashboard API for the latest
