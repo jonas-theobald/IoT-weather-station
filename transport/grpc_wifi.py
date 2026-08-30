@@ -36,11 +36,17 @@ def with_wifi_telemetry(entity: Entity, count: int) -> Entity:
 class GrpcWifiTransport:
     kind = TransportKind.WIFI
 
-    def __init__(self, server: str, timeout_s: float = 5.0):
+    def __init__(self, server: str, timeout_s: float = 5.0, backlog=None):
         self._server = server
         self._timeout = timeout_s
         self._stub = WorldServiceStub(grpc.insecure_channel(server))
         self._sent = 0
+        # reliability.backlog.BacklogSource: when set, send() syncs the DB
+        # backlog instead of pushing the passed entity -- the live reading is
+        # in the DB by send time (collector saves before building), so it is
+        # simply the newest backlog item. Oldest-first order is load-bearing:
+        # the engine drops updates with older lifetime.fresh.
+        self._backlog = backlog
 
     def is_available(self) -> bool:
         host, _, port = self._server.partition(":")
@@ -51,6 +57,19 @@ class GrpcWifiTransport:
             return False
 
     def send(self, entity: Entity) -> TransportResult:
+        if self._backlog is None:
+            return self._push(entity)
+        # Drain everything unacked, oldest first; watermark advances per ack,
+        # so a mid-drain failure resumes exactly where it stopped.
+        result = TransportResult(self.kind, False, "backlog empty")
+        for rowid, past in self._backlog.pending():
+            result = self._push(past)
+            if not result.ok:
+                return result
+            self._backlog.ack(rowid)
+        return result
+
+    def _push(self, entity: Entity) -> TransportResult:
         try:
             wired = with_wifi_telemetry(entity, self._sent + 1)
             self._stub.Push(EntityChangeRequest(changes=[wired]), timeout=self._timeout)
