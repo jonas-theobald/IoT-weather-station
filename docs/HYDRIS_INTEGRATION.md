@@ -98,6 +98,8 @@ Verified end-to-end on real hardware (Pi Zero 2 W, armv7l, Bookworm) against a r
 
 BLE: verified end-to-end against a live engine — discovery via the advertised UUID, connect, metadata identity, ESS notifications into metrics, RSSI on the link, stale-data drop to `Lost`, automatic reconnect. Encoding covered by `tests/test_ble_gatt.py`; the hub-side consumer is the separate `hydris-weather-ble-plugin` repo, which mirrors the ESS test vectors.
 
+**Standing test — per-transport value verification.** With both transports feeding one entity, a broken transport hides behind the working one: WiFi's 15 s pushes overwrote corrupted BLE values for a full day before an EMCON test exposed a hub-side payload-crossing bug. The per-transport liveness counters (metrics 10/11) are not enough — they tick even when the values are wrong. After any change touching a transport: disable the other one (EMCON, or stop the gRPC adapter), then check the *values* against the local dashboard, not just the counters. Cheap soft-unplug for the USB path while testing: `echo "" | sudo tee /sys/kernel/config/usb_gadget/pizero/UDC` (rebind by writing the UDC name back) — `systemctl restart usb-gadget` is not an unplug (oneshot, no teardown).
+
 Not done: armv6l (original Pi Zero W — only tested on the newer Zero 2 W).
 
 ## Future: native plugin

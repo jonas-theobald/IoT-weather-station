@@ -111,8 +111,15 @@ sed -i "s|ExecStart=.*|ExecStart=$VENV_DIR/bin/python $INSTALL_DIR/start_all.py|
 
 # Install service
 sudo cp "$SERVICE_FILE" /etc/systemd/system/
+
+# BLE advert reconciler (see docs/HYDRIS_INTEGRATION.md: btmgmt adverts
+# die silently on radio churn and connection drops; the timer heals them)
+sudo install -m 755 ./ble-advert-refresh /usr/local/sbin/ble-advert-refresh
+sudo cp ./ble-advert.service ./ble-advert.timer /etc/systemd/system/
+
 sudo systemctl daemon-reload
 sudo systemctl enable bme280
+sudo systemctl enable --now ble-advert.timer
 
 # Start service
 echo -e "${YELLOW}[6/6]${NC} Starting service..."
