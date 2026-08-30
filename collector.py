@@ -15,7 +15,7 @@ from adafruit_bme280 import basic as adafruit_bme280
 from database import save_reading
 
 from model.entity_builder import StationConfig, build_weather_entity
-from reliability.pending_store import PendingEntityStore
+from reliability.backlog import BacklogSource
 from routing.transport_router import RouterMode, TransportRouter
 from transport.ble_gatt import BleGattTransport
 from transport.grpc_wifi import GrpcWifiTransport
@@ -51,13 +51,14 @@ def main():
     station = StationConfig(entity_id=HYDRIS_ENTITY_ID, label=HYDRIS_LABEL)
     transports = []
     if HYDRIS_SERVER:
-        transports.append(GrpcWifiTransport(HYDRIS_SERVER))
+        # Store-and-forward: WiFi syncs the SQLite backlog (readings the hub
+        # never acked survive outages and replay on reconnect, oldest first).
+        transports.append(GrpcWifiTransport(HYDRIS_SERVER, backlog=BacklogSource(station)))
     if HYDRIS_BLE:
         transports.append(BleGattTransport(station, device_name=HYDRIS_BLE_NAME))
     # BROADCAST: BLE isn't an alternative route to the same hub, it's a
     # different consumer (a nearby Hydris BLE central) -- feed both.
     router = TransportRouter(transports, mode=RouterMode.BROADCAST)
-    pending = PendingEntityStore()
 
     try:
         while True:
@@ -76,12 +77,12 @@ def main():
                         "pressure_hpa": pressure,
                     }
                     measured_at = datetime.datetime.now(datetime.timezone.utc)
-                    entity = pending.pending() or build_weather_entity(reading, station, measured_at)
+                    # Always the freshest reading: WiFi outages are covered by
+                    # the durable backlog, and BLE serves live values only --
+                    # re-sending a stale stashed entity helped neither.
+                    entity = build_weather_entity(reading, station, measured_at)
                     results = router.send(entity)
-                    if any(r.ok for r in results):
-                        pending.clear()
-                    else:
-                        pending.stash(entity)
+                    if not any(r.ok for r in results):
                         print(f"Hydris push failed (continuing): {results}")
                 except Exception as e:
                     print(f"Hydris publish error (continuing): {e}")

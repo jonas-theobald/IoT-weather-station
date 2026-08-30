@@ -22,6 +22,13 @@ def init_db():
             pressure REAL NOT NULL
         )
     """)
+    # Store-and-forward watermarks: last reading rowid a consumer has acked.
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS sync_state (
+            name TEXT PRIMARY KEY,
+            last_id INTEGER NOT NULL
+        )
+    """)
     conn.commit()
     conn.close()
 
@@ -78,6 +85,44 @@ def get_latest_reading():
     row = cursor.fetchone()
     conn.close()
     return row
+
+
+def get_sync_watermark(name):
+    """Last acked reading rowid for a named consumer, or None if never set."""
+    conn = sqlite3.connect(DB_PATH)
+    row = conn.execute("SELECT last_id FROM sync_state WHERE name = ?", (name,)).fetchone()
+    conn.close()
+    return row[0] if row else None
+
+
+def set_sync_watermark(name, last_id):
+    conn = sqlite3.connect(DB_PATH)
+    conn.execute(
+        "INSERT INTO sync_state (name, last_id) VALUES (?, ?) "
+        "ON CONFLICT(name) DO UPDATE SET last_id = excluded.last_id",
+        (name, last_id),
+    )
+    conn.commit()
+    conn.close()
+
+
+def get_max_reading_id():
+    conn = sqlite3.connect(DB_PATH)
+    row = conn.execute("SELECT MAX(id) FROM readings").fetchone()
+    conn.close()
+    return row[0] or 0
+
+
+def get_readings_after(last_id, limit):
+    """Readings newer than a rowid, oldest first: (id, timestamp, t, h, p)."""
+    conn = sqlite3.connect(DB_PATH)
+    rows = conn.execute(
+        "SELECT id, timestamp, temperature, humidity, pressure FROM readings "
+        "WHERE id > ? ORDER BY id ASC LIMIT ?",
+        (last_id, limit),
+    ).fetchall()
+    conn.close()
+    return rows
 
 
 # Initialize database on import
